@@ -28,30 +28,23 @@ if ($q !== '') {
 $daftarFoto = [
     'Pantai Anyer' =>
         'assets/css/images/pantai_anyer.jpg',
-
     'Pantai Sawarna' =>
         'assets/css/images/pantai_sawarna.jpg',
-
     'Taman Nasional Ujung Kulon' =>
         'assets/css/images/ujung_kulon.jpg',
-
     'Masjid Agung Banten' =>
         'assets/css/images/masjid_banten.jpg',
-
     'Keraton Surosowan' =>
         'assets/css/images/keraton_surosowan.jpg',
-
     'Pantai Carita' =>
         'assets/css/images/pantai_carita.jpg',
-
     'Tanjung Lesung' =>
         'assets/css/images/tanjung_lesung.jpg',
-
     'Desa Adat Baduy' =>
         'assets/css/images/baduy_banten.jpg'
 ];
 
-// Memeriksa apakah pengguna sudah login
+// Memeriksa status login
 $sudahLogin = !empty($_SESSION['user_id']);
 $namaPengguna = $_SESSION['nama']
     ?? $_SESSION['username']
@@ -68,7 +61,7 @@ $rolePengguna = $_SESSION['role'] ?? 'user';
 
     <title>Pariwisata Banten</title>
 
-    <link rel="stylesheet" href="assets/css/style.css?v=6">
+    <link rel="stylesheet" href="assets/css/style.css?v=7">
 </head>
 
 <body>
@@ -81,8 +74,9 @@ $rolePengguna = $_SESSION['role'] ?? 'user';
 
     <nav>
         <span class="user-greeting">
-                Halo, <?= e($namaPengguna) ?>!
-            </span>
+            Halo, <?= e($namaPengguna) ?>!
+        </span>
+
         <a href="beranda.php">Beranda</a>
         <a href="#wisata">Destinasi</a>
 
@@ -145,18 +139,16 @@ $rolePengguna = $_SESSION['role'] ?? 'user';
         </form>
     </div>
 
-    
-<div class="hero-picture">
-    <img
-        src="assets/css/images/pantai_anyer.jpg"
-        alt="Pantai Anyer"
-        class="hero-image"
-    >
-    <div class="hero-caption">
-        Waktunya Berpetualang
-    </div>
-</div>
+    <div class="hero-picture">
+        <img
+            src="assets/css/images/pantai_anyer.jpg"
+            alt="Pantai Anyer"
+            class="hero-image"
+        >
 
+        <div class="hero-caption">
+            Waktunya Berpetualang
+        </div>
     </div>
 
 </section>
@@ -173,9 +165,37 @@ $rolePengguna = $_SESSION['role'] ?? 'user';
             </h2>
         </div>
 
-        <span class="muted">
-            <?= count($wisata) ?> destinasi
-        </span>
+        <div class="wisata-controls">
+
+            <span class="muted">
+                <?= count($wisata) ?> destinasi
+            </span>
+
+            <?php if (!empty($wisata)): ?>
+                <div class="slide-buttons">
+
+                    <button
+                        type="button"
+                        onclick="geserWisata(-1)"
+                        aria-label="Geser ke kiri"
+                        title="Wisata sebelumnya"
+                    >
+                        &#10094;
+                    </button>
+
+                    <button
+                        type="button"
+                        onclick="geserWisata(1)"
+                        aria-label="Geser ke kanan"
+                        title="Wisata berikutnya"
+                    >
+                        &#10095;
+                    </button>
+
+                </div>
+            <?php endif; ?>
+
+        </div>
 
     </div>
 
@@ -195,7 +215,7 @@ $rolePengguna = $_SESSION['role'] ?? 'user';
 
     <?php else: ?>
 
-        <div class="grid">
+        <div class="grid" id="slideWisata">
 
             <?php foreach ($wisata as $w): ?>
 
@@ -280,6 +300,28 @@ $rolePengguna = $_SESSION['role'] ?? 'user';
     </p>
 
 </footer>
+
+<script>
+function geserWisata(arah) {
+    const slide = document.getElementById('slideWisata');
+
+    if (!slide) return;
+
+    const kartu = slide.querySelector('.card');
+
+    if (!kartu) return;
+
+    const gaya = window.getComputedStyle(slide);
+    const jarakAntarkartu = parseFloat(gaya.columnGap) || 0;
+    const jarak = kartu.getBoundingClientRect().width
+        + jarakAntarkartu;
+
+    slide.scrollBy({
+        left: arah * jarak,
+        behavior: 'smooth'
+    });
+}
+</script>
 
 </body>
 </html>

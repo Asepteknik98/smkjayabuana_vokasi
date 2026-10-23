@@ -811,3 +811,63 @@ footer p {
         padding: 7px;
     }
 }
+
+/* TOMBOL SLIDE DESTINASI WISATA */
+
+.wisata-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.slide-buttons {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.slide-buttons button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid var(--pink-border);
+    border-radius: 50%;
+    background: var(--pink-light);
+    color: var(--pink-dark);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s,
+                transform 0.2s;
+}
+
+.slide-buttons button:hover {
+    background: var(--pink);
+    color: white;
+}
+
+.slide-buttons button:active {
+    transform: scale(0.92);
+}
+
+/* PAKSA SLIDE HANYA DI LAYAR HP */
+@media (max-width: 700px) {
+    .wisata-controls {
+        gap: 7px;
+    }
+
+    .slide-buttons {
+        gap: 5px;
+    }
+
+    .slide-buttons button {
+        width: 30px;
+        height: 30px;
+        font-size: 15px;
+    }
+}
