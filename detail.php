@@ -59,12 +59,12 @@ body {
 .brand {
     font-size: 23px;
     font-weight: bold;
-    color: #174d3e;
+    color: #acf5e0;
     text-decoration: none;
 }
 
 .brand span {
-    color: #d69b42;
+    color: #eeafeb;
 }
 
 .navbar nav {
@@ -74,14 +74,14 @@ body {
 }
 
 .navbar nav a {
-    color: #37483f;
+    color: #2a2c2b;
     text-decoration: none;
     font-weight: 600;
     font-size: 14px;
 }
 
 .navbar nav a:hover {
-    color: #19805b;
+    color: #f2beff;
 }
 
 .container {
@@ -93,7 +93,7 @@ body {
 .back-link {
     display: inline-block;
     margin-bottom: 24px;
-    color: #277357;
+    color: #5c585e;
     font-weight: bold;
     text-decoration: none;
 }
@@ -128,7 +128,7 @@ body {
     padding: 8px 13px;
     border-radius: 30px;
     background: #e6f5eb;
-    color: #21704d;
+    color: #bf9ee6;
     font-size: 12px;
     font-weight: bold;
 }
@@ -187,7 +187,7 @@ h1 {
     padding: 13px 17px;
     border: 0;
     border-radius: 9px;
-    background: #247451;
+    background: #e092cd;
     color: white;
     text-decoration: none;
     font-weight: bold;
@@ -203,18 +203,18 @@ h1 {
 
 .btn-map {
     width: 100%;
-    background: #2467ce;
+    background: #cb9de5;
 }
 
 .btn-map:hover {
-    background: #174ea6;
+    background: #dbacee;
 }
 
 .btn-photo {
     margin-top: 15px;
     background: #fff;
     border: 1px solid #d7e4da;
-    color: #246348;
+    color: #d4a6dd;
 }
 
 .btn-photo:hover {
@@ -232,7 +232,7 @@ h1 {
 }
 
 .booking h2 {
-    color: #176345;
+    color: #c88cd4;
     font-size: 30px;
     margin: 9px 0 20px;
 }
