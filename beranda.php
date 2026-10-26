@@ -323,5 +323,10 @@ function geserWisata(arah) {
 }
 </script>
 
+<?php require_once __DIR__ . '/whatsapp.php'; ?>
+
+</body>
+</html>
+
 </body>
 </html>
