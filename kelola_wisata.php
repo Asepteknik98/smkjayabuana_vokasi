@@ -6,7 +6,6 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Hanya admin yang boleh mengakses
 if (
     !isset($_SESSION['user_id']) ||
     ($_SESSION['role'] ?? '') !== 'admin'
@@ -15,7 +14,6 @@ if (
     exit;
 }
 
-// Token keamanan
 if (empty($_SESSION['csrf_wisata'])) {
     $_SESSION['csrf_wisata'] = bin2hex(random_bytes(32));
 }
@@ -26,108 +24,121 @@ function bersihkan($nilai) {
 
 $error = '';
 
-// PROSES TAMBAH, EDIT, HAPUS
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
     $token = $_POST['csrf_token'] ?? '';
 
     if (
         !is_string($token) ||
         !hash_equals($_SESSION['csrf_wisata'], $token)
     ) {
-        exit('Permintaan tidak valid. Muat ulang halaman.');
-    }
+        $error = 'Permintaan tidak valid. Muat ulang halaman.';
+    } else {
+        $aksi = $_POST['aksi'] ?? '';
 
-    $aksi = $_POST['aksi'] ?? '';
-
-    try {
-
-        // HAPUS WISATA
-        if ($aksi === 'hapus') {
-
-            $id = filter_var(
-                $_POST['id'] ?? '',
-                FILTER_VALIDATE_INT
-            );
-
-            if (!$id || $id < 1) {
-                throw new Exception('ID wisata tidak valid.');
-            }
-
-            $stmt = $pdo->prepare(
-                'DELETE FROM wisata WHERE id = ?'
-            );
-            $stmt->execute([$id]);
-
-            header('Location: kelola_wisata.php?pesan=hapus');
-            exit;
-        }
-
-        // SIMPAN WISATA
-        if ($aksi === 'simpan') {
-
-            $idInput = $_POST['id'] ?? '';
-            $id = $idInput === ''
-                ? null
-                : filter_var($idInput, FILTER_VALIDATE_INT);
-
-            if (
-                $idInput !== '' &&
-                (!$id || $id < 1)
-            ) {
-                throw new Exception('ID wisata tidak valid.');
-            }
-
-            $nama = trim($_POST['nama'] ?? '');
-            $lokasi = trim($_POST['lokasi'] ?? '');
-            $kategori = trim($_POST['kategori'] ?? '');
-            $harga = $_POST['harga'] ?? '';
-            $gambar = trim($_POST['gambar'] ?? '');
-            $deskripsi = trim($_POST['deskripsi'] ?? '');
-
-            if (
-                $nama === '' ||
-                $lokasi === '' ||
-                $kategori === '' ||
-                $harga === '' ||
-                $gambar === '' ||
-                $deskripsi === ''
-            ) {
-                throw new Exception('Semua kolom wajib diisi.');
-            }
-
-            if (
-                !is_numeric($harga) ||
-                (float)$harga < 0
-            ) {
-                throw new Exception(
-                    'Harga harus berupa angka nol atau lebih.'
+        try {
+            if ($aksi === 'hapus') {
+                $id = filter_var(
+                    $_POST['id'] ?? '',
+                    FILTER_VALIDATE_INT
                 );
-            }
 
-            if (
-                strlen($nama) > 150 ||
-                strlen($lokasi) > 150 ||
-                strlen($kategori) > 50 ||
-                strlen($gambar) > 500
-            ) {
-                throw new Exception(
-                    'Ada teks yang melebihi batas panjang.'
-                );
-            }
-
-            // EDIT
-            if ($id !== null) {
+                if (!$id || $id < 1) {
+                    throw new Exception('ID wisata tidak valid.');
+                }
 
                 $stmt = $pdo->prepare(
-                    'UPDATE wisata
-                     SET nama = ?,
-                         lokasi = ?,
-                         kategori = ?,
-                         harga = ?,
-                         gambar = ?,
-                         deskripsi = ?
-                     WHERE id = ?'
+                    'DELETE FROM wisata WHERE id = ?'
+                );
+                $stmt->execute([$id]);
+
+                header('Location: kelola_wisata.php?pesan=hapus');
+                exit;
+            }
+
+            if ($aksi === 'simpan') {
+                $idInput = $_POST['id'] ?? '';
+                $id = $idInput === ''
+                    ? null
+                    : filter_var($idInput, FILTER_VALIDATE_INT);
+
+                if ($idInput !== '' && (!$id || $id < 1)) {
+                    throw new Exception('ID wisata tidak valid.');
+                }
+
+                $nama = trim((string)($_POST['nama'] ?? ''));
+                $lokasi = trim((string)($_POST['lokasi'] ?? ''));
+                $kategori = trim((string)($_POST['kategori'] ?? ''));
+                $harga = $_POST['harga'] ?? '';
+                $gambar = trim((string)($_POST['gambar'] ?? ''));
+                $deskripsi = trim((string)($_POST['deskripsi'] ?? ''));
+
+                if (
+                    $nama === '' ||
+                    $lokasi === '' ||
+                    $kategori === '' ||
+                    $harga === '' ||
+                    $gambar === '' ||
+                    $deskripsi === ''
+                ) {
+                    throw new Exception('Semua kolom wajib diisi.');
+                }
+
+                if (!is_numeric($harga) || (float)$harga < 0) {
+                    throw new Exception(
+                        'Harga harus berupa angka nol atau lebih.'
+                    );
+                }
+
+                if (
+                    mb_strlen($nama) > 150 ||
+                    mb_strlen($lokasi) > 150 ||
+                    mb_strlen($kategori) > 50 ||
+                    mb_strlen($gambar) > 500
+                ) {
+                    throw new Exception(
+                        'Ada teks yang melebihi batas panjang.'
+                    );
+                }
+
+                if ($id !== null) {
+                    $cek = $pdo->prepare(
+                        'SELECT COUNT(*) FROM wisata WHERE id = ?'
+                    );
+                    $cek->execute([$id]);
+
+                    if ((int)$cek->fetchColumn() === 0) {
+                        throw new Exception('Wisata tidak ditemukan.');
+                    }
+
+                    $stmt = $pdo->prepare(
+                        'UPDATE wisata
+                         SET nama = ?,
+                             lokasi = ?,
+                             kategori = ?,
+                             harga = ?,
+                             gambar = ?,
+                             deskripsi = ?
+                         WHERE id = ?'
+                    );
+
+                    $stmt->execute([
+                        $nama,
+                        $lokasi,
+                        $kategori,
+                        $harga,
+                        $gambar,
+                        $deskripsi,
+                        $id
+                    ]);
+
+                    header('Location: kelola_wisata.php?pesan=edit');
+                    exit;
+                }
+
+                $stmt = $pdo->prepare(
+                    'INSERT INTO wisata
+                     (nama, lokasi, kategori, harga, gambar, deskripsi)
+                     VALUES (?, ?, ?, ?, ?, ?)'
                 );
 
                 $stmt->execute([
@@ -136,68 +147,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $kategori,
                     $harga,
                     $gambar,
-                    $deskripsi,
-                    $id
+                    $deskripsi
                 ]);
 
-                header('Location: kelola_wisata.php?pesan=edit');
+                header('Location: kelola_wisata.php?pesan=tambah');
                 exit;
             }
 
-            // TAMBAH
-            $stmt = $pdo->prepare(
-                'INSERT INTO wisata
-                 (nama, lokasi, kategori, harga, gambar, deskripsi)
-                 VALUES (?, ?, ?, ?, ?, ?)'
-            );
+            throw new Exception('Aksi tidak dikenali.');
 
-            $stmt->execute([
-                $nama,
-                $lokasi,
-                $kategori,
-                $harga,
-                $gambar,
-                $deskripsi
-            ]);
-
-            header('Location: kelola_wisata.php?pesan=tambah');
-            exit;
-        }
-
-        throw new Exception('Aksi tidak dikenali.');
-
-    } catch (Throwable $e) {
-
-        if ($e instanceof PDOException) {
-            $error = 'Data gagal diproses. Wisata mungkin masih digunakan dalam pesanan.';
-        } else {
-            $error = $e->getMessage();
+        } catch (Throwable $e) {
+            if ($e instanceof PDOException) {
+                $error = 'Data gagal diproses. Periksa database atau hubungan data pesanan.';
+            } else {
+                $error = $e->getMessage();
+            }
         }
     }
 }
 
-// DATA EDIT
+// Ambil data untuk form edit
 $edit = null;
 
 if (isset($_GET['edit'])) {
-
     $idEdit = filter_var(
         $_GET['edit'],
         FILTER_VALIDATE_INT
     );
 
     if ($idEdit && $idEdit > 0) {
-
         $stmt = $pdo->prepare(
             'SELECT * FROM wisata WHERE id = ?'
         );
-
         $stmt->execute([$idEdit]);
-        $edit = $stmt->fetch(PDO::FETCH_ASSOC);
+        $edit = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 }
 
-// DAFTAR WISATA
+// Daftar wisata
 $stmt = $pdo->query(
     'SELECT * FROM wisata ORDER BY id DESC'
 );
@@ -210,30 +197,27 @@ $pesan = [
     'hapus' => 'Data wisata berhasil dihapus.'
 ];
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-<title>Kelola Wisata - Admin</title>
+<title>Kelola Wisata | JelajahBanten</title>
 
 <style>
-
-/* DASAR */
-
 * {
     box-sizing: border-box;
 }
 
-html,
-body {
+html, body {
+    margin: 0;
+    width: 100%;
     max-width: 100%;
-    overflow-x: hidden;
 }
 
 body {
-    margin: 0;
     font-family: Arial, sans-serif;
     font-size: 14px;
     line-height: 1.5;
@@ -244,8 +228,6 @@ body {
 a {
     text-decoration: none;
 }
-
-/* HEADER */
 
 header {
     padding: 18px 5%;
@@ -266,7 +248,7 @@ header p {
 header nav {
     display: flex;
     flex-wrap: wrap;
-    gap: 9px 16px;
+    gap: 10px 16px;
 }
 
 header a {
@@ -274,20 +256,20 @@ header a {
     font-size: 13px;
 }
 
-/* KONTEN */
-
 main {
-    width: calc(100% - 32px);
+    width: calc(100% - 28px);
     max-width: 1100px;
-    margin: 22px auto;
+    margin: 20px auto;
+    min-width: 0;
 }
 
 .panel {
+    min-width: 0;
     padding: 20px;
-    margin-bottom: 20px;
-    background: white;
+    margin-bottom: 18px;
     border: 1px solid #f2d5e1;
     border-radius: 13px;
+    background: white;
     box-shadow: 0 4px 14px rgba(160,91,120,.08);
 }
 
@@ -296,8 +278,6 @@ main {
     color: #c85f89;
     font-size: 19px;
 }
-
-/* FORM */
 
 label {
     display: block;
@@ -310,7 +290,7 @@ input,
 textarea {
     width: 100%;
     min-width: 0;
-    padding: 10px;
+    padding: 11px;
     border: 1px solid #f2d5e1;
     border-radius: 8px;
     background: #fffafd;
@@ -322,6 +302,7 @@ input:focus,
 textarea:focus {
     outline: none;
     border-color: #e78eaf;
+    box-shadow: 0 0 0 3px #e78eaf25;
 }
 
 textarea {
@@ -349,12 +330,9 @@ small {
     margin-top: 16px;
 }
 
-/* TOMBOL */
-
 button,
 .btn {
     display: inline-block;
-    width: auto;
     padding: 9px 13px;
     border: none;
     border-radius: 8px;
@@ -388,14 +366,13 @@ button:hover,
     background: #765e6b;
 }
 
-/* PESAN */
-
 .success,
 .error {
-    padding: 11px 13px;
+    padding: 12px;
     margin-bottom: 15px;
     border-radius: 9px;
     font-size: 12px;
+    overflow-wrap: anywhere;
 }
 
 .success {
@@ -408,10 +385,40 @@ button:hover,
     color: #a83e4c;
 }
 
+/* PENCARIAN */
+
+.cari-box {
+    margin-bottom: 15px;
+}
+
+.cari-box label {
+    margin-top: 0;
+    color: #b7507b;
+}
+
+.cari-box input {
+    width: 100%;
+    background: white;
+}
+
+.info-hasil {
+    margin: 10px 0 15px;
+    font-size: 12px;
+    color: #927b87;
+}
+
+#tidakDitemukan {
+    display: none;
+    padding: 18px;
+    text-align: center;
+    color: #927b87;
+}
+
 /* TABEL DESKTOP */
 
 .table-wrap {
     width: 100%;
+    min-width: 0;
     overflow-x: auto;
 }
 
@@ -443,25 +450,51 @@ button:hover,
     display: block;
     width: 85px;
     height: 60px;
+    max-width: 100%;
     object-fit: cover;
     border-radius: 7px;
+}
+
+.aksi-detail {
+    min-width: 0;
+}
+
+.aksi-detail summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    background: #fff0f5;
+    color: #b7507b;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    list-style: none;
+}
+
+.aksi-detail summary::-webkit-details-marker {
+    display: none;
+}
+
+.aksi-detail summary::after {
+    content: "⌄";
+}
+
+.aksi-detail[open] summary::after {
+    content: "⌃";
 }
 
 .actions {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
+    gap: 7px;
+    margin-top: 10px;
 }
 
 .actions form {
     margin: 0;
-}
-
-.actions .btn,
-.actions button {
-    padding: 7px 10px;
-    font-size: 11px;
 }
 
 .kosong {
@@ -470,16 +503,13 @@ button:hover,
     color: #927b87;
 }
 
-/* TABLET */
-
 @media (max-width: 850px) {
-
     .form-grid {
         grid-template-columns: 1fr;
     }
 }
 
-/* HP - TABEL MENJADI KARTU */
+/* TAMPILAN HP */
 
 @media (max-width: 700px) {
 
@@ -511,7 +541,6 @@ button:hover,
 
     input,
     textarea {
-        padding: 9px;
         font-size: 12px;
     }
 
@@ -530,7 +559,7 @@ button:hover,
         display: none;
     }
 
-    .tabel-admin tbody tr {
+    .tabel-admin tbody tr.baris-wisata {
         display: block;
         width: 100%;
         margin-bottom: 11px;
@@ -540,7 +569,7 @@ button:hover,
         background: #fffafd;
     }
 
-    .tabel-admin tbody td {
+    .tabel-admin tbody tr.baris-wisata td {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
@@ -553,24 +582,33 @@ button:hover,
         overflow-wrap: anywhere;
     }
 
-    .tabel-admin tbody td::before {
+    .tabel-admin tbody tr.baris-wisata td::before {
         content: attr(data-label);
-        flex: 0 0 83px;
+        flex: 0 0 82px;
         color: #c85f89;
         font-weight: bold;
         text-align: left;
     }
 
-    .tabel-admin tbody td:last-child {
+    .tabel-admin tbody tr.baris-wisata td:last-child {
         border-bottom: none;
     }
 
     .tabel-admin .foto {
         width: 85px;
         height: 60px;
+        flex-shrink: 0;
     }
 
-    .tabel-admin .actions {
+    .aksi-detail {
+        width: 100%;
+    }
+
+    .aksi-detail summary {
+        width: 100%;
+    }
+
+    .actions {
         justify-content: flex-end;
     }
 
@@ -584,34 +622,31 @@ button:hover,
     }
 }
 
-/* HP KECIL */
-
 @media (max-width: 360px) {
-
-    .tabel-admin tbody td::before {
+    .tabel-admin tbody tr.baris-wisata td::before {
         flex-basis: 70px;
     }
 
-    .tabel-admin tbody td {
+    .tabel-admin tbody tr.baris-wisata td {
         font-size: 11px;
     }
 }
-
 </style>
 </head>
 
 <body>
 
 <header>
-    <h2>Panel Admin — Kelola Wisata</h2>
+    <h2>💐 Panel Admin — Kelola Wisata</h2>
 
     <p>
-        Halo,
-        <?= bersihkan($_SESSION['nama'] ?? 'Administrator') ?>!
+        Halo, <?= bersihkan($_SESSION['nama'] ?? 'Administrator') ?>!
     </p>
 
     <nav>
         <a href="admin.php">Dashboard Admin</a>
+        <a href="admin_kategori.php">Kelola Kategori</a>
+        <a href="admin_wilayah.php">Kelola Wilayah</a>
         <a href="beranda.php">Lihat Website</a>
         <a href="logout.php">Logout</a>
     </nav>
@@ -620,9 +655,7 @@ button:hover,
 <main>
 
     <?php if ($error !== ''): ?>
-        <p class="error">
-            <?= bersihkan($error) ?>
-        </p>
+        <p class="error"><?= bersihkan($error) ?></p>
     <?php endif; ?>
 
     <?php if (
@@ -650,11 +683,7 @@ button:hover,
                 value="<?= bersihkan($_SESSION['csrf_wisata']) ?>"
             >
 
-            <input
-                type="hidden"
-                name="aksi"
-                value="simpan"
-            >
+            <input type="hidden" name="aksi" value="simpan">
 
             <input
                 type="hidden"
@@ -665,8 +694,9 @@ button:hover,
             <div class="form-grid">
 
                 <div>
-                    <label>Nama Wisata</label>
+                    <label for="nama">Nama Wisata</label>
                     <input
+                        id="nama"
                         name="nama"
                         maxlength="150"
                         required
@@ -675,8 +705,9 @@ button:hover,
                 </div>
 
                 <div>
-                    <label>Lokasi</label>
+                    <label for="lokasi">Lokasi</label>
                     <input
+                        id="lokasi"
                         name="lokasi"
                         maxlength="150"
                         required
@@ -685,8 +716,9 @@ button:hover,
                 </div>
 
                 <div>
-                    <label>Kategori</label>
+                    <label for="kategori">Kategori</label>
                     <input
+                        id="kategori"
                         name="kategori"
                         maxlength="50"
                         required
@@ -696,8 +728,9 @@ button:hover,
                 </div>
 
                 <div>
-                    <label>Harga Tiket (Rp)</label>
+                    <label for="harga">Harga Tiket (Rp)</label>
                     <input
+                        id="harga"
                         type="number"
                         name="harga"
                         min="0"
@@ -709,8 +742,9 @@ button:hover,
 
             </div>
 
-            <label>Lokasi Gambar</label>
+            <label for="gambar">Lokasi Gambar</label>
             <input
+                id="gambar"
                 name="gambar"
                 maxlength="500"
                 required
@@ -722,8 +756,9 @@ button:hover,
                 Masukkan alamat atau lokasi file gambar wisata.
             </small>
 
-            <label>Deskripsi</label>
+            <label for="deskripsi">Deskripsi</label>
             <textarea
+                id="deskripsi"
                 name="deskripsi"
                 required
             ><?= bersihkan($edit['deskripsi'] ?? '') ?></textarea>
@@ -735,10 +770,7 @@ button:hover,
                 </button>
 
                 <?php if ($edit): ?>
-                    <a
-                        class="btn batal"
-                        href="kelola_wisata.php"
-                    >
+                    <a class="btn batal" href="kelola_wisata.php">
                         Batal Edit
                     </a>
                 <?php endif; ?>
@@ -753,9 +785,22 @@ button:hover,
 
     <section class="panel">
 
-        <h2>
-            Daftar Wisata (<?= count($wisataList) ?>)
-        </h2>
+        <h2>Daftar Wisata (<?= count($wisataList) ?>)</h2>
+
+        <div class="cari-box">
+            <label for="cariWisata">🔍 Cari Wisata untuk Diedit</label>
+
+            <input
+                type="search"
+                id="cariWisata"
+                placeholder="Ketik nama, lokasi, kategori, atau ID wisata..."
+                autocomplete="off"
+            >
+        </div>
+
+        <p class="info-hasil" id="infoHasil">
+            Menampilkan <?= count($wisataList) ?> wisata
+        </p>
 
         <div class="table-wrap">
 
@@ -776,18 +821,24 @@ button:hover,
                 <tbody>
 
                 <?php if (!$wisataList): ?>
-
                     <tr>
                         <td colspan="7" class="kosong">
                             Belum ada data wisata.
                         </td>
                     </tr>
-
                 <?php endif; ?>
 
                 <?php foreach ($wisataList as $w): ?>
 
-                    <tr>
+                    <tr
+                        class="baris-wisata"
+                        data-cari="<?= bersihkan(
+                            $w['id'] . ' ' .
+                            $w['nama'] . ' ' .
+                            $w['lokasi'] . ' ' .
+                            $w['kategori']
+                        ) ?>"
+                    >
 
                         <td data-label="ID">
                             <?= (int)$w['id'] ?>
@@ -796,14 +847,13 @@ button:hover,
                         <td data-label="Gambar">
 
                             <?php if ($w['gambar'] !== ''): ?>
-
                                 <img
                                     class="foto"
                                     src="<?= bersihkan($w['gambar']) ?>"
-                                    alt="Foto wisata"
+                                    alt="Foto <?= bersihkan($w['nama']) ?>"
+                                    loading="lazy"
                                     onerror="this.style.display='none'"
                                 >
-
                             <?php endif; ?>
 
                         </td>
@@ -831,49 +881,57 @@ button:hover,
 
                         <td data-label="Aksi">
 
-                            <div class="actions">
+                            <details class="aksi-detail">
 
-                                <a
-                                    class="btn"
-                                    href="kelola_wisata.php?edit=<?= (int)$w['id'] ?>#form-wisata"
-                                >
-                                    Edit
-                                </a>
+                                <summary>Lihat Aksi</summary>
 
-                                <form
-                                    method="post"
-                                    action="kelola_wisata.php"
-                                    onsubmit="return confirm('Yakin ingin menghapus wisata ini?')"
-                                >
+                                <div class="actions">
 
-                                    <input
-                                        type="hidden"
-                                        name="csrf_token"
-                                        value="<?= bersihkan($_SESSION['csrf_wisata']) ?>"
+                                    <a
+                                        class="btn"
+                                        href="kelola_wisata.php?edit=<?= (int)$w['id'] ?>#form-wisata"
+                                    >
+                                        Edit
+                                    </a>
+
+                                    <form
+                                        method="post"
+                                        action="kelola_wisata.php"
+                                        onsubmit="return confirm('Yakin ingin menghapus wisata ini?')"
                                     >
 
-                                    <input
-                                        type="hidden"
-                                        name="aksi"
-                                        value="hapus"
-                                    >
+                                        <input
+                                            type="hidden"
+                                            name="csrf_token"
+                                            value="<?= bersihkan(
+                                                $_SESSION['csrf_wisata']
+                                            ) ?>"
+                                        >
 
-                                    <input
-                                        type="hidden"
-                                        name="id"
-                                        value="<?= (int)$w['id'] ?>"
-                                    >
+                                        <input
+                                            type="hidden"
+                                            name="aksi"
+                                            value="hapus"
+                                        >
 
-                                    <button
-                                        class="hapus"
-                                        type="submit"
-                                    >
-                                        Hapus
-                                    </button>
+                                        <input
+                                            type="hidden"
+                                            name="id"
+                                            value="<?= (int)$w['id'] ?>"
+                                        >
 
-                                </form>
+                                        <button
+                                            class="hapus"
+                                            type="submit"
+                                        >
+                                            Hapus
+                                        </button>
 
-                            </div>
+                                    </form>
+
+                                </div>
+
+                            </details>
 
                         </td>
 
@@ -885,11 +943,49 @@ button:hover,
 
             </table>
 
+            <p id="tidakDitemukan">
+                Wisata yang kamu cari tidak ditemukan.
+            </p>
+
         </div>
 
     </section>
 
 </main>
+
+<script>
+const inputCariWisata = document.getElementById('cariWisata');
+const barisWisata = document.querySelectorAll('.baris-wisata');
+const infoHasil = document.getElementById('infoHasil');
+const tidakDitemukan = document.getElementById('tidakDitemukan');
+
+function cariWisata() {
+    const kata = inputCariWisata.value.toLowerCase().trim();
+    let jumlah = 0;
+
+    barisWisata.forEach(function(baris) {
+        const data = (baris.dataset.cari || '').toLowerCase();
+        const cocok = data.includes(kata);
+
+        baris.style.display = cocok ? '' : 'none';
+
+        if (cocok) {
+            jumlah++;
+        }
+    });
+
+    infoHasil.textContent =
+        'Menampilkan ' + jumlah +
+        ' dari ' + barisWisata.length + ' wisata';
+
+    tidakDitemukan.style.display =
+        barisWisata.length > 0 && jumlah === 0
+        ? 'block'
+        : 'none';
+}
+
+inputCariWisata.addEventListener('input', cariWisata);
+</script>
 
 </body>
 </html>
