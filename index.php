@@ -1,5 +1,6 @@
 
 <?php
+<<<<<<< HEAD
 require_once __DIR__ . '/config/database.php';
 $conn->set_charset("utf8mb4");
 
@@ -1025,3 +1026,8 @@ footer p {
 
 </body>
 </html>
+=======
+header("Location: beranda.php");
+exit;
+?>
+>>>>>>> 9b99be052337c1cf2021bc5cc09d0bb19528f0f6
