@@ -6,6 +6,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// Hanya admin yang boleh masuk
 if (
     !isset($_SESSION['user_id']) ||
     ($_SESSION['role'] ?? '') !== 'admin'
@@ -14,16 +15,29 @@ if (
     exit;
 }
 
+// Fungsi keamanan tampilan
 function amanPesanan($teks) {
-    return htmlspecialchars((string)$teks, ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars(
+        (string)$teks,
+        ENT_QUOTES,
+        'UTF-8'
+    );
 }
 
 function rupiahPesanan($angka) {
-    return 'Rp ' . number_format((float)$angka, 0, ',', '.');
+    return 'Rp ' . number_format(
+        (float)$angka,
+        0,
+        ',',
+        '.'
+    );
 }
 
+// CSRF
 if (empty($_SESSION['csrf_admin_pesanan'])) {
-    $_SESSION['csrf_admin_pesanan'] = bin2hex(random_bytes(32));
+    $_SESSION['csrf_admin_pesanan'] = bin2hex(
+        random_bytes(32)
+    );
 }
 
 $error = '';
@@ -36,14 +50,30 @@ $statusPilihan = [
     'Dibatalkan'
 ];
 
-// PROSES PERUBAHAN STATUS
+// FILTER DAN PENCARIAN
+$cari = trim((string)($_GET['cari'] ?? ''));
+$filterStatus = trim(
+    (string)($_GET['status'] ?? '')
+);
+
+if (
+    $filterStatus !== '' &&
+    !in_array($filterStatus, $statusPilihan, true)
+) {
+    $filterStatus = '';
+}
+
+// PROSES UBAH STATUS
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $token = $_POST['csrf_token'] ?? '';
 
     if (
         !is_string($token) ||
-        !hash_equals($_SESSION['csrf_admin_pesanan'], $token)
+        !hash_equals(
+            $_SESSION['csrf_admin_pesanan'],
+            $token
+        )
     ) {
         $error = 'Permintaan tidak valid. Muat ulang halaman.';
     } else {
@@ -58,7 +88,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (
             !$id ||
             $id < 1 ||
-            !in_array($statusBaru, $statusPilihan, true)
+            !in_array(
+                $statusBaru,
+                $statusPilihan,
+                true
+            )
         ) {
             $error = 'ID atau status pesanan tidak valid.';
         } else {
@@ -73,15 +107,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = 'Pesanan tidak ditemukan.';
 
                 } elseif ($statusBaru === 'Lunas') {
-                    $error = 'Status Lunas hanya boleh diberikan setelah pembayaran diterima dan diverifikasi. Halaman ini belum memiliki verifikasi pembayaran otomatis.';
+                    $error = 'Status Lunas hanya boleh diberikan setelah pembayaran benar-benar diterima dan diverifikasi. Sistem ini belum memiliki verifikasi pembayaran otomatis.';
 
                 } else {
+
                     $stmt = $pdo->prepare(
                         'UPDATE pesanan
                          SET status = ?
                          WHERE id = ?'
                     );
-                    $stmt->execute([$statusBaru, $id]);
+
+                    $stmt->execute([
+                        $statusBaru,
+                        $id
+                    ]);
 
                     header(
                         'Location: admin_pesanan.php?pesan=berhasil'
@@ -90,12 +129,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
             } catch (PDOException $e) {
-                $error = 'Status gagal diperbarui. Silakan coba lagi.';
+                $error = 'Status gagal diperbarui.';
             }
         }
     }
 }
 
+// PESAN BERHASIL
 if (
     isset($_GET['pesan']) &&
     $_GET['pesan'] === 'berhasil'
@@ -103,29 +143,104 @@ if (
     $pesan = 'Status pesanan berhasil diperbarui.';
 }
 
-// PENCARIAN
-$cari = trim((string)($_GET['cari'] ?? ''));
+// RINGKASAN SELURUH PESANAN
+$ringkasan = [
+    'total' => 0,
+    'menunggu_pembayaran' => 0,
+    'menunggu_konfirmasi' => 0,
+    'menunggu' => 0,
+    'lunas' => 0,
+    'dibatalkan' => 0
+];
 
 try {
 
+    $stmtRingkasan = $pdo->query(
+        "SELECT
+            COUNT(*) AS total,
+            COALESCE(SUM(
+                CASE
+                    WHEN status = 'Menunggu pembayaran'
+                    THEN 1 ELSE 0
+                END
+            ), 0) AS menunggu_pembayaran,
+            COALESCE(SUM(
+                CASE
+                    WHEN status = 'Menunggu konfirmasi'
+                    THEN 1 ELSE 0
+                END
+            ), 0) AS menunggu_konfirmasi,
+            COALESCE(SUM(
+                CASE
+                    WHEN status = 'Lunas'
+                    THEN 1 ELSE 0
+                END
+            ), 0) AS lunas,
+            COALESCE(SUM(
+                CASE
+                    WHEN status = 'Dibatalkan'
+                    THEN 1 ELSE 0
+                END
+            ), 0) AS dibatalkan
+         FROM pesanan"
+    );
+
+    $hasilRingkasan = $stmtRingkasan->fetch(
+        PDO::FETCH_ASSOC
+    );
+
+    if ($hasilRingkasan) {
+        foreach ($hasilRingkasan as $kunci => $nilai) {
+            $ringkasan[$kunci] = (int)$nilai;
+        }
+    }
+
+    $ringkasan['menunggu'] =
+        $ringkasan['menunggu_pembayaran'] +
+        $ringkasan['menunggu_konfirmasi'];
+
+} catch (PDOException $e) {
+    $error = 'Ringkasan pesanan gagal dimuat.';
+}
+
+// DAFTAR PESANAN DENGAN FILTER
+$daftarPesanan = [];
+
+try {
+
+    $syarat = [];
+    $parameter = [];
+
     if ($cari !== '') {
-        $stmt = $pdo->prepare(
-            'SELECT * FROM pesanan
-             WHERE kode_pesanan LIKE ?
-             ORDER BY id DESC'
-        );
-        $stmt->execute(['%' . $cari . '%']);
-    } else {
-        $stmt = $pdo->query(
-            'SELECT * FROM pesanan ORDER BY id DESC'
+        $syarat[] = 'kode_pesanan LIKE ?';
+        $parameter[] = '%' . $cari . '%';
+    }
+
+    if ($filterStatus !== '') {
+        $syarat[] = 'status = ?';
+        $parameter[] = $filterStatus;
+    }
+
+    $sql = 'SELECT * FROM pesanan';
+
+    if ($syarat) {
+        $sql .= ' WHERE ' . implode(
+            ' AND ',
+            $syarat
         );
     }
 
-    $daftarPesanan = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $sql .= ' ORDER BY id DESC';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($parameter);
+
+    $daftarPesanan = $stmt->fetchAll(
+        PDO::FETCH_ASSOC
+    );
 
 } catch (PDOException $e) {
-    $daftarPesanan = [];
-    $error = 'Data pesanan gagal dimuat.';
+    $error = 'Daftar pesanan gagal dimuat.';
 }
 
 // DETAIL TIKET
@@ -144,6 +259,7 @@ if ($daftarPesanan) {
     );
 
     try {
+
         $stmt = $pdo->prepare(
             "SELECT
                 dp.pesanan_id,
@@ -169,22 +285,32 @@ if ($daftarPesanan) {
         $error = 'Detail tiket gagal dimuat.';
     }
 }
+
+$adaFilter = (
+    $cari !== '' ||
+    $filterStatus !== ''
+);
 ?>
 
 <!DOCTYPE html>
 <html lang="id">
 <head>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <title>Kelola Pesanan | JelajahBanten</title>
 
 <style>
+
+/* DASAR */
+
 * {
     box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
     margin: 0;
     width: 100%;
     max-width: 100%;
@@ -201,6 +327,14 @@ body {
 a {
     text-decoration: none;
 }
+
+button,
+input,
+select {
+    font: inherit;
+}
+
+/* NAVBAR */
 
 .navbar {
     display: flex;
@@ -232,6 +366,8 @@ a {
     color: white;
     font-size: 13px;
 }
+
+/* KONTEN */
 
 .container {
     width: calc(100% - 28px);
@@ -276,6 +412,69 @@ a {
     font-size: 19px;
 }
 
+/* RINGKASAN */
+
+.ringkasan-grid {
+    display: grid;
+    grid-template-columns: repeat(
+        3,
+        minmax(0, 1fr)
+    );
+    gap: 14px;
+    margin: 18px 0;
+}
+
+.kartu-ringkasan {
+    min-width: 0;
+    padding: 20px;
+    border: 1px solid #f2d5e1;
+    border-radius: 13px;
+    background: white;
+    box-shadow: 0 4px 14px rgba(160,91,120,.08);
+}
+
+.kartu-ringkasan .ikon {
+    display: inline-block;
+    margin-bottom: 10px;
+    font-size: 24px;
+}
+
+.kartu-ringkasan h3 {
+    margin: 0 0 8px;
+    color: #927b87;
+    font-size: 13px;
+    font-weight: normal;
+}
+
+.kartu-ringkasan .angka {
+    display: block;
+    color: #c85f89;
+    font-size: 31px;
+    font-weight: bold;
+    line-height: 1.2;
+}
+
+.kartu-ringkasan small {
+    display: block;
+    margin-top: 8px;
+    color: #927b87;
+    font-size: 11px;
+}
+
+.kartu-total {
+    background: #fff0f5;
+}
+
+.kartu-menunggu {
+    background: #fff8ee;
+}
+
+.kartu-lunas {
+    background: #f1fbf5;
+}
+
+/* FORM */
+
 input,
 select {
     min-width: 0;
@@ -284,7 +483,6 @@ select {
     border-radius: 8px;
     background: white;
     color: #59434f;
-    font: inherit;
 }
 
 input:focus,
@@ -296,11 +494,10 @@ select:focus {
 .btn {
     display: inline-block;
     padding: 10px 14px;
-    border: 0;
+    border: none;
     border-radius: 8px;
     background: #e78eaf;
     color: white;
-    font: inherit;
     font-size: 12px;
     font-weight: bold;
     text-align: center;
@@ -319,20 +516,41 @@ select:focus {
     background: #765e6b;
 }
 
-.cari {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 9px;
+/* FILTER */
+
+.filter-form {
+    display: grid;
+    grid-template-columns:
+        minmax(0, 1fr)
+        minmax(0, 1fr)
+        auto
+        auto;
+    align-items: end;
+    gap: 10px;
 }
 
-.cari input {
-    flex: 1 1 200px;
+.filter-item {
+    min-width: 0;
+}
+
+.filter-item label {
+    display: block;
+    margin-bottom: 6px;
+    color: #b7507b;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.filter-item input,
+.filter-item select {
     width: 100%;
 }
 
-.cari .btn {
-    flex: 0 0 auto;
+.filter-form .btn {
+    white-space: nowrap;
 }
+
+/* PESAN */
 
 .error,
 .success,
@@ -359,10 +577,11 @@ select:focus {
     color: #765b24;
 }
 
-/* TOMBOL LIHAT SEMUA PESANAN */
+/* LIHAT PESANAN */
 
 .daftar-toggle {
     width: 100%;
+    min-width: 0;
 }
 
 .daftar-toggle > summary {
@@ -399,6 +618,12 @@ select:focus {
 
 .isi-daftar {
     padding-top: 15px;
+}
+
+.info-filter {
+    margin: 0 0 15px;
+    color: #927b87;
+    font-size: 12px;
 }
 
 /* KARTU PESANAN */
@@ -448,8 +673,8 @@ select:focus {
     border-radius: 7px;
     background: #fff0f5;
     color: #b7507b;
-    font-weight: bold;
     font-size: 11px;
+    font-weight: bold;
     overflow-wrap: anywhere;
 }
 
@@ -506,7 +731,21 @@ footer {
     font-size: 12px;
 }
 
-/* TAMPILAN HP */
+/* TABLET */
+
+@media (max-width: 850px) {
+
+    .filter-form {
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+    }
+
+    .filter-form .btn {
+        width: 100%;
+    }
+}
+
+/* HP */
 
 @media (max-width: 600px) {
 
@@ -540,14 +779,43 @@ footer {
         font-size: 17px;
     }
 
-    .cari {
-        flex-direction: column;
+    .ringkasan-grid {
+        grid-template-columns:
+            repeat(3, minmax(0, 1fr));
+        gap: 7px;
+        margin: 13px 0;
     }
 
-    .cari input,
-    .cari .btn {
+    .kartu-ringkasan {
+        padding: 11px 7px;
+        text-align: center;
+    }
+
+    .kartu-ringkasan .ikon {
+        font-size: 19px;
+        margin-bottom: 6px;
+    }
+
+    .kartu-ringkasan h3 {
+        font-size: 10px;
+        line-height: 1.3;
+    }
+
+    .kartu-ringkasan .angka {
+        font-size: 24px;
+    }
+
+    .kartu-ringkasan small {
+        font-size: 9px;
+        overflow-wrap: anywhere;
+    }
+
+    .filter-form {
+        grid-template-columns: 1fr;
+    }
+
+    .filter-form .btn {
         width: 100%;
-        flex: initial;
     }
 
     .daftar-toggle > summary {
@@ -583,12 +851,31 @@ footer {
         padding: 10px;
     }
 }
+
+/* HP SANGAT KECIL */
+
+@media (max-width: 360px) {
+
+    .ringkasan-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .kartu-ringkasan {
+        text-align: left;
+        padding: 12px;
+    }
+
+    .kartu-ringkasan .ikon {
+        margin-bottom: 3px;
+    }
+}
 </style>
 </head>
 
 <body>
 
 <nav class="navbar">
+
     <a class="brand" href="admin.php">
         💐 Jelajah<span>Banten</span>
     </a>
@@ -598,16 +885,19 @@ footer {
         <a href="kelola_wisata.php">Kelola Wisata</a>
         <a href="logout.php">Keluar</a>
     </div>
+
 </nav>
 
 <main class="container">
 
     <p class="eyebrow">ADMIN PANEL</p>
 
-    <h1 class="section-title">Kelola Pesanan</h1>
+    <h1 class="section-title">
+        Kelola Pesanan
+    </h1>
 
     <p class="subjudul">
-        Lihat pesanan tiket dan perbarui statusnya.
+        Pantau pesanan tiket wisata dan perbarui statusnya.
     </p>
 
     <?php if ($error !== ''): ?>
@@ -622,33 +912,136 @@ footer {
         </div>
     <?php endif; ?>
 
+    <!-- RINGKASAN PESANAN -->
+
+    <section class="ringkasan-grid">
+
+        <div class="kartu-ringkasan kartu-total">
+
+            <span class="ikon">📋</span>
+
+            <h3>Total Pesanan</h3>
+
+            <span class="angka">
+                <?= $ringkasan['total'] ?>
+            </span>
+
+            <small>Semua pesanan masuk</small>
+
+        </div>
+
+        <div class="kartu-ringkasan kartu-menunggu">
+
+            <span class="ikon">⏳</span>
+
+            <h3>Menunggu</h3>
+
+            <span class="angka">
+                <?= $ringkasan['menunggu'] ?>
+            </span>
+
+            <small>Menunggu pembayaran / konfirmasi</small>
+
+        </div>
+
+        <div class="kartu-ringkasan kartu-lunas">
+
+            <span class="ikon">✅</span>
+
+            <h3>Lunas</h3>
+
+            <span class="angka">
+                <?= $ringkasan['lunas'] ?>
+            </span>
+
+            <small>Pembayaran selesai</small>
+
+        </div>
+
+    </section>
+
+    <!-- PERINGATAN -->
+
     <div class="peringatan">
+
         <strong>Penting:</strong>
-        Status Lunas hanya boleh diberikan setelah pembayaran
-        benar-benar diterima dan diverifikasi.
-        Sistem ini belum memverifikasi pembayaran secara otomatis.
+        Status Lunas hanya boleh diberikan setelah
+        pembayaran benar-benar diterima dan diverifikasi.
+        Sistem belum memverifikasi pembayaran otomatis.
+
     </div>
 
-    <!-- PENCARIAN PESANAN -->
+    <!-- FILTER PESANAN -->
 
     <section class="panel">
 
-        <h2>Cari Pesanan</h2>
+        <h2>🔍 Cari & Filter Pesanan</h2>
 
-        <form method="get" class="cari">
+        <form
+            method="get"
+            action="admin_pesanan.php"
+            class="filter-form"
+        >
 
-            <input
-                type="search"
-                name="cari"
-                placeholder="Cari berdasarkan kode pesanan..."
-                value="<?= amanPesanan($cari) ?>"
+            <div class="filter-item">
+
+                <label for="cari">
+                    Kode Pesanan
+                </label>
+
+                <input
+                    type="search"
+                    name="cari"
+                    id="cari"
+                    placeholder="Masukkan kode pesanan..."
+                    value="<?= amanPesanan($cari) ?>"
+                >
+
+            </div>
+
+            <div class="filter-item">
+
+                <label for="filterStatus">
+                    Filter Status
+                </label>
+
+                <select
+                    name="status"
+                    id="filterStatus"
+                >
+
+                    <option value="">
+                        Semua Status
+                    </option>
+
+                    <?php foreach ($statusPilihan as $s): ?>
+
+                        <option
+                            value="<?= amanPesanan($s) ?>"
+                            <?= $filterStatus === $s
+                                ? 'selected'
+                                : '' ?>
+                        >
+                            <?= amanPesanan($s) ?>
+                        </option>
+
+                    <?php endforeach; ?>
+
+                </select>
+
+            </div>
+
+            <button
+                type="submit"
+                class="btn"
             >
-
-            <button class="btn" type="submit">
-                Cari
+                Terapkan
             </button>
 
-            <a class="btn btn-reset" href="admin_pesanan.php">
+            <a
+                href="admin_pesanan.php"
+                class="btn btn-reset"
+            >
                 Reset
             </a>
 
@@ -656,17 +1049,18 @@ footer {
 
     </section>
 
-    <!-- DAFTAR PESANAN DISEMBUNYIKAN DULU -->
+    <!-- DAFTAR PESANAN -->
 
     <section class="panel">
 
         <h2>
-            Daftar Pesanan (<?= count($daftarPesanan) ?>)
+            Daftar Pesanan
+            (<?= count($daftarPesanan) ?>)
         </h2>
 
         <details
             class="daftar-toggle"
-            <?= $cari !== '' ? 'open' : '' ?>
+            <?= $adaFilter ? 'open' : '' ?>
         >
 
             <summary>
@@ -675,10 +1069,20 @@ footer {
 
             <div class="isi-daftar">
 
+                <?php if ($adaFilter): ?>
+
+                    <p class="info-filter">
+                        Menampilkan
+                        <?= count($daftarPesanan) ?>
+                        pesanan sesuai pencarian atau filter.
+                    </p>
+
+                <?php endif; ?>
+
                 <?php if (!$daftarPesanan): ?>
 
                     <p class="kosong">
-                        Belum ada pesanan atau kode pesanan tidak ditemukan.
+                        Tidak ada pesanan yang ditemukan.
                     </p>
 
                 <?php endif; ?>
@@ -692,7 +1096,9 @@ footer {
                             <div>
 
                                 <h3>
-                                    <?= amanPesanan($p['kode_pesanan']) ?>
+                                    <?= amanPesanan(
+                                        $p['kode_pesanan']
+                                    ) ?>
                                 </h3>
 
                                 <p>
@@ -701,14 +1107,14 @@ footer {
                                 </p>
 
                                 <p>
-                                    <strong>Tanggal kunjungan:</strong>
+                                    <strong>Tanggal Kunjungan:</strong>
                                     <?= amanPesanan(
                                         $p['tanggal_kunjungan']
                                     ) ?>
                                 </p>
 
                                 <p>
-                                    <strong>Dibuat pada:</strong>
+                                    <strong>Dibuat Pada:</strong>
                                     <?= amanPesanan(
                                         $p['dibuat_pada']
                                     ) ?>
@@ -719,18 +1125,25 @@ footer {
                             <div>
 
                                 <strong class="total">
-                                    <?= rupiahPesanan($p['total']) ?>
+                                    <?= rupiahPesanan(
+                                        $p['total']
+                                    ) ?>
                                 </strong>
 
                                 <p>
                                     <strong>Metode:</strong>
-                                    <?= amanPesanan($p['metode']) ?>
+                                    <?= amanPesanan(
+                                        $p['metode']
+                                    ) ?>
                                 </p>
 
                                 <p>
                                     <strong>Status:</strong>
+
                                     <span class="status">
-                                        <?= amanPesanan($p['status']) ?>
+                                        <?= amanPesanan(
+                                            $p['status']
+                                        ) ?>
                                     </span>
                                 </p>
 
@@ -738,12 +1151,16 @@ footer {
 
                         </div>
 
+                        <!-- DETAIL TIKET -->
+
                         <div class="detail-tiket">
 
                             <strong>Detail Tiket</strong>
 
                             <?php if (
-                                !empty($detailSemua[$p['id']])
+                                !empty(
+                                    $detailSemua[$p['id']]
+                                )
                             ): ?>
 
                                 <ul>
@@ -759,10 +1176,13 @@ footer {
                                         ) ?>
 
                                         —
-                                        <?= (int)$d['jumlah'] ?> tiket
+                                        <?= (int)$d['jumlah'] ?>
+                                        tiket
 
                                         ×
-                                        <?= rupiahPesanan($d['harga']) ?>
+                                        <?= rupiahPesanan(
+                                            $d['harga']
+                                        ) ?>
                                     </li>
 
                                 <?php endforeach; ?>
@@ -771,13 +1191,15 @@ footer {
 
                             <?php else: ?>
 
-                                <p>Detail tiket tidak tersedia.</p>
+                                <p>
+                                    Detail tiket tidak tersedia.
+                                </p>
 
                             <?php endif; ?>
 
                         </div>
 
-                        <!-- FORM STATUS -->
+                        <!-- UBAH STATUS -->
 
                         <form
                             method="post"
@@ -789,7 +1211,9 @@ footer {
                                 type="hidden"
                                 name="csrf_token"
                                 value="<?= amanPesanan(
-                                    $_SESSION['csrf_admin_pesanan']
+                                    $_SESSION[
+                                        'csrf_admin_pesanan'
+                                    ]
                                 ) ?>"
                             >
 

@@ -73,7 +73,52 @@ if (!$w) {
     exit('Wisata tidak ditemukan. <a href="beranda.php">Kembali</a>');
 }
 
-// Siapkan pencarian foto dan lokasi Google Maps
+// =====================================
+// PERBAIKAN FOTO WISATA
+// =====================================
+
+$daftarFoto = [
+    'pantai anyer' => 'assets/css/images/pantai_anyer.jpg',
+    'pantai sawarna' => 'assets/css/images/pantai_sawarna.jpg',
+    'taman nasional ujung kulon' => 'assets/css/images/ujung_kulon.jpg',
+    'masjid agung banten' => 'assets/css/images/masjid_banten.jpg',
+    'keraton surosowan' => 'assets/css/images/keraton_surosowan.jpg',
+    'pantai carita' => 'assets/css/images/pantai_carita.jpeg',
+    'tanjung lesung' => 'assets/css/images/tanjung_lesung.jpg',
+    'desa adat baduy' => 'assets/css/images/baduy_banten.jpg'
+];
+
+$namaNormal = strtolower(trim($w['nama']));
+$namaNormal = preg_replace('/\s+/', ' ', $namaNormal);
+
+// Ambil gambar awal dari database
+$gambarWisata = trim((string)($w['gambar'] ?? ''));
+
+// Khusus ID 9: Masjid Agung Banten
+if ($id === 9) {
+    $gambarWisata = 'assets/css/images/masjid_banten.jpg';
+}
+// Untuk wisata yang namanya sesuai daftar
+elseif (isset($daftarFoto[$namaNormal])) {
+    $gambarWisata = $daftarFoto[$namaNormal];
+}
+
+// Jika gambar kosong, gunakan gambar cadangan
+if ($gambarWisata === '') {
+    $gambarWisata = 'assets/css/images/pantai_anyer.jpg';
+}
+
+// Tambahkan versi gambar supaya cache diperbarui
+$lokasiFile = __DIR__ . '/' . ltrim($gambarWisata, '/');
+
+if (is_file($lokasiFile)) {
+    $gambarWisata .= '?v=' . filemtime($lokasiFile);
+}
+
+// =====================================
+// GOOGLE MAPS DAN PENCARIAN FOTO
+// =====================================
+
 $kataFoto = rawurlencode(
     $w['nama'] . ' ' . $w['lokasi'] . ' foto wisata'
 );
@@ -86,6 +131,7 @@ $urlMaps = 'https://www.google.com/maps/search/?api=1&query=' . $kataMaps;
 $urlFoto = 'https://www.google.com/search?tbm=isch&q=' . $kataFoto;
 >>>>>>> 9b99be052337c1cf2021bc5cc09d0bb19528f0f6
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -450,9 +496,10 @@ $urlFoto = 'https://www.google.com/search?tbm=isch&q=' . $kataFoto;
 =======
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+
 <title><?= e($w['nama']) ?> | JelajahBanten</title>
 
-<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/style.css?v=8">
 
 <style>
 * {
@@ -461,8 +508,8 @@ $urlFoto = 'https://www.google.com/search?tbm=isch&q=' . $kataFoto;
 
 body {
     margin: 0;
-    background: #f7f9f7;
-    color: #24352e;
+    background: #fff7fa;
+    color: #493943;
     font-family: Arial, sans-serif;
 }
 
@@ -479,12 +526,12 @@ body {
 .brand {
     font-size: 23px;
     font-weight: bold;
-    color: #acf5e0;
+    color: #e78eaf;
     text-decoration: none;
 }
 
 .brand span {
-    color: #eeafeb;
+    color: #c85f89;
 }
 
 .navbar nav {
@@ -494,14 +541,14 @@ body {
 }
 
 .navbar nav a {
-    color: #2a2c2b;
+    color: #493943;
     text-decoration: none;
     font-weight: 600;
     font-size: 14px;
 }
 
 .navbar nav a:hover {
-    color: #f2beff;
+    color: #c85f89;
 }
 
 .container {
@@ -513,7 +560,7 @@ body {
 .back-link {
     display: inline-block;
     margin-bottom: 24px;
-    color: #5c585e;
+    color: #c85f89;
     font-weight: bold;
     text-decoration: none;
 }
@@ -530,7 +577,8 @@ body {
     background: white;
     border-radius: 18px;
     padding: 24px;
-    box-shadow: 0 8px 30px #183e2d0b;
+    box-shadow: 0 8px 30px #a6537b12;
+    min-width: 0;
 }
 
 .detail-image {
@@ -539,7 +587,7 @@ body {
     height: 390px;
     object-fit: cover;
     border-radius: 13px;
-    background: #e8eee9;
+    background: #fff0f5;
 }
 
 .tag {
@@ -547,8 +595,8 @@ body {
     margin-top: 23px;
     padding: 8px 13px;
     border-radius: 30px;
-    background: #e6f5eb;
-    color: #bf9ee6;
+    background: #fff0f5;
+    color: #c85f89;
     font-size: 12px;
     font-weight: bold;
 }
@@ -557,18 +605,19 @@ h1 {
     margin: 15px 0 12px;
     font-size: 32px;
     line-height: 1.25;
+    overflow-wrap: anywhere;
 }
 
 .location {
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    color: #64746b;
+    color: #806b76;
     line-height: 1.7;
 }
 
 .description {
-    color: #526259;
+    color: #665660;
     line-height: 1.9;
     white-space: pre-line;
     margin-top: 20px;
@@ -582,8 +631,8 @@ h1 {
 .map-box {
     margin-top: 25px;
     padding: 19px;
-    border: 1px solid #e0ece3;
-    background: #f6fbf7;
+    border: 1px solid #f3d6e2;
+    background: #fff7fa;
     border-radius: 13px;
 }
 
@@ -593,7 +642,7 @@ h1 {
 }
 
 .map-box p {
-    color: #66756c;
+    color: #806b76;
     font-size: 14px;
     line-height: 1.7;
     margin: 0 0 15px;
@@ -607,7 +656,7 @@ h1 {
     padding: 13px 17px;
     border: 0;
     border-radius: 9px;
-    background: #e092cd;
+    background: #e78eaf;
     color: white;
     text-decoration: none;
     font-weight: bold;
@@ -617,28 +666,29 @@ h1 {
 }
 
 .btn:hover {
-    background: #18583c;
+    background: #c85f89;
     transform: translateY(-1px);
 }
 
 .btn-map {
     width: 100%;
-    background: #cb9de5;
+    background: #c85f89;
+    text-align: center;
 }
 
 .btn-map:hover {
-    background: #dbacee;
+    background: #a84670;
 }
 
 .btn-photo {
     margin-top: 15px;
-    background: #fff;
-    border: 1px solid #d7e4da;
-    color: #d4a6dd;
+    background: white;
+    border: 1px solid #f0cddd;
+    color: #c85f89;
 }
 
 .btn-photo:hover {
-    background: #f0f8f2;
+    background: #fff0f5;
 }
 
 .booking {
@@ -647,19 +697,19 @@ h1 {
 }
 
 .booking-label {
-    color: #78847c;
+    color: #907b86;
     font-size: 13px;
 }
 
 .booking h2 {
-    color: #c88cd4;
+    color: #c85f89;
     font-size: 30px;
     margin: 9px 0 20px;
 }
 
 .booking hr {
     border: 0;
-    border-top: 1px solid #edf0ed;
+    border-top: 1px solid #f2dce6;
     margin: 20px 0;
 }
 
@@ -673,7 +723,7 @@ h1 {
 .booking input[type="number"] {
     width: 100%;
     padding: 13px;
-    border: 1px solid #d8e1da;
+    border: 1px solid #ead0dc;
     border-radius: 9px;
     margin-bottom: 16px;
     font-size: 15px;
@@ -685,7 +735,7 @@ h1 {
 
 .booking-note {
     font-size: 12px;
-    color: #7a867e;
+    color: #907b86;
     line-height: 1.7;
     margin-top: 14px;
 }
@@ -693,8 +743,8 @@ h1 {
 footer {
     padding: 25px 15px;
     text-align: center;
-    color: #718077;
-    background: #fff;
+    color: #907b86;
+    background: white;
     font-size: 13px;
 }
 
@@ -741,6 +791,10 @@ footer {
     .detail-image {
         height: 230px;
     }
+
+    .booking h2 {
+        font-size: 26px;
+    }
 }
 </style>
 </head>
@@ -771,9 +825,9 @@ footer {
 
             <img
                 class="detail-image"
-                src="<?= e($w['gambar']) ?>"
+                src="<?= e($gambarWisata) ?>"
                 alt="<?= e($w['nama']) ?>"
-                onerror="this.onerror=null;this.src='assets/images/no-image.png';"
+                onerror="this.onerror=null;this.src='assets/css/images/pantai_anyer.jpg';"
             >
 
             <span class="tag">
@@ -833,7 +887,7 @@ footer {
                 <input
                     type="hidden"
                     name="wisata_id"
-                    value="<?= (int) $w['id'] ?>"
+                    value="<?= (int)$w['id'] ?>"
                 >
 
                 <label for="jumlah">Jumlah tiket</label>

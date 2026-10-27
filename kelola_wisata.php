@@ -19,8 +19,137 @@ if (empty($_SESSION['csrf_wisata'])) {
 }
 
 function bersihkan($nilai) {
-    return htmlspecialchars((string)$nilai, ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars(
+        (string)$nilai,
+        ENT_QUOTES,
+        'UTF-8'
+    );
 }
+
+// ========================================
+// FUNGSI HARGA RUPIAH
+// ========================================
+
+function hargaKeAngka($harga) {
+    $harga = trim((string)$harga);
+
+    // Hapus tulisan Rp dan spasi
+    $harga = preg_replace('/[Rr][Pp]/', '', $harga);
+    $harga = preg_replace('/\s+/', '', $harga);
+
+    // Hapus titik pemisah ribuan
+    $harga = str_replace('.', '', $harga);
+
+    // Hanya menerima angka bulat
+    if (
+        $harga === '' ||
+        !ctype_digit($harga)
+    ) {
+        throw new Exception(
+            'Harga harus berupa angka, contoh: 75.000 atau 75000.'
+        );
+    }
+
+    // Batasi supaya sesuai kapasitas harga yang wajar
+    if (strlen($harga) > 12) {
+        throw new Exception('Harga terlalu besar.');
+    }
+
+    return (int)$harga;
+}
+
+function formatHargaInput($harga) {
+    return number_format(
+        (float)$harga,
+        0,
+        ',',
+        '.'
+    );
+}
+
+// ========================================
+// FUNGSI GAMBAR WISATA
+// ========================================
+
+function gambarWisataAdmin($wisata) {
+    $id = (int)($wisata['id'] ?? 0);
+
+    $nama = strtolower(
+        trim((string)($wisata['nama'] ?? ''))
+    );
+
+    $nama = preg_replace('/\s+/', ' ', $nama);
+
+    // Khusus Masjid Agung Banten ID 9
+    if (
+        $id === 9 ||
+        (
+            strpos($nama, 'masjid') !== false &&
+            strpos($nama, 'banten') !== false
+        )
+    ) {
+        return 'assets/css/images/masjid_banten.jpg';
+    }
+
+    // Foto wisata lainnya
+    $daftarFoto = [
+        'pantai anyer' =>
+            'assets/css/images/pantai_anyer.jpg',
+
+        'pantai sawarna' =>
+            'assets/css/images/pantai_sawarna.jpg',
+
+        'taman nasional ujung kulon' =>
+            'assets/css/images/ujung_kulon.jpg',
+
+        'keraton surosowan' =>
+            'assets/css/images/keraton_surosowan.jpg',
+
+        'pantai carita' =>
+            'assets/css/images/pantai_carita.jpeg',
+
+        'tanjung lesung' =>
+            'assets/css/images/tanjung_lesung.jpg',
+
+        'desa adat baduy' =>
+            'assets/css/images/baduy_banten.jpg'
+    ];
+
+    if (isset($daftarFoto[$nama])) {
+        return $daftarFoto[$nama];
+    }
+
+    return trim((string)($wisata['gambar'] ?? ''));
+}
+
+function urlGambarAdmin($gambar) {
+    $gambar = trim((string)$gambar);
+
+    if ($gambar === '') {
+        return '';
+    }
+
+    // URL dari luar website
+    if (preg_match('~^https?://~i', $gambar)) {
+        return $gambar;
+    }
+
+    $lokasi = __DIR__ . '/' . ltrim($gambar, '/');
+
+    if (is_file($lokasi)) {
+        $pemisah = strpos($gambar, '?') !== false
+            ? '&'
+            : '?';
+
+        return $gambar . $pemisah . 'v=' . filemtime($lokasi);
+    }
+
+    return $gambar;
+}
+
+// ========================================
+// PROSES TAMBAH, EDIT, HAPUS
+// ========================================
 
 $error = '';
 
@@ -57,37 +186,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($aksi === 'simpan') {
                 $idInput = $_POST['id'] ?? '';
+
                 $id = $idInput === ''
                     ? null
-                    : filter_var($idInput, FILTER_VALIDATE_INT);
+                    : filter_var(
+                        $idInput,
+                        FILTER_VALIDATE_INT
+                    );
 
-                if ($idInput !== '' && (!$id || $id < 1)) {
+                if (
+                    $idInput !== '' &&
+                    (!$id || $id < 1)
+                ) {
                     throw new Exception('ID wisata tidak valid.');
                 }
 
-                $nama = trim((string)($_POST['nama'] ?? ''));
-                $lokasi = trim((string)($_POST['lokasi'] ?? ''));
-                $kategori = trim((string)($_POST['kategori'] ?? ''));
-                $harga = $_POST['harga'] ?? '';
-                $gambar = trim((string)($_POST['gambar'] ?? ''));
-                $deskripsi = trim((string)($_POST['deskripsi'] ?? ''));
+                $nama = trim(
+                    (string)($_POST['nama'] ?? '')
+                );
+
+                $lokasi = trim(
+                    (string)($_POST['lokasi'] ?? '')
+                );
+
+                $kategori = trim(
+                    (string)($_POST['kategori'] ?? '')
+                );
+
+                $hargaInput = trim(
+                    (string)($_POST['harga'] ?? '')
+                );
+
+                $gambar = trim(
+                    (string)($_POST['gambar'] ?? '')
+                );
+
+                $deskripsi = trim(
+                    (string)($_POST['deskripsi'] ?? '')
+                );
 
                 if (
                     $nama === '' ||
                     $lokasi === '' ||
                     $kategori === '' ||
-                    $harga === '' ||
+                    $hargaInput === '' ||
                     $gambar === '' ||
                     $deskripsi === ''
                 ) {
-                    throw new Exception('Semua kolom wajib diisi.');
-                }
-
-                if (!is_numeric($harga) || (float)$harga < 0) {
                     throw new Exception(
-                        'Harga harus berupa angka nol atau lebih.'
+                        'Semua kolom wajib diisi.'
                     );
                 }
+
+                // Konversi 75.000 menjadi 75000
+                $harga = hargaKeAngka($hargaInput);
 
                 if (
                     mb_strlen($nama) > 150 ||
@@ -104,10 +256,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $cek = $pdo->prepare(
                         'SELECT COUNT(*) FROM wisata WHERE id = ?'
                     );
+
                     $cek->execute([$id]);
 
                     if ((int)$cek->fetchColumn() === 0) {
-                        throw new Exception('Wisata tidak ditemukan.');
+                        throw new Exception(
+                            'Wisata tidak ditemukan.'
+                        );
                     }
 
                     $stmt = $pdo->prepare(
@@ -131,7 +286,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $id
                     ]);
 
-                    header('Location: kelola_wisata.php?pesan=edit');
+                    header(
+                        'Location: kelola_wisata.php?pesan=edit'
+                    );
                     exit;
                 }
 
@@ -150,7 +307,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $deskripsi
                 ]);
 
-                header('Location: kelola_wisata.php?pesan=tambah');
+                header(
+                    'Location: kelola_wisata.php?pesan=tambah'
+                );
                 exit;
             }
 
@@ -158,7 +317,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         } catch (Throwable $e) {
             if ($e instanceof PDOException) {
-                $error = 'Data gagal diproses. Periksa database atau hubungan data pesanan.';
+                $error =
+                    'Data gagal diproses. Periksa database atau hubungan data pesanan.';
             } else {
                 $error = $e->getMessage();
             }
@@ -166,7 +326,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Ambil data untuk form edit
+// ========================================
+// AMBIL DATA EDIT
+// ========================================
+
 $edit = null;
 
 if (isset($_GET['edit'])) {
@@ -179,12 +342,17 @@ if (isset($_GET['edit'])) {
         $stmt = $pdo->prepare(
             'SELECT * FROM wisata WHERE id = ?'
         );
+
         $stmt->execute([$idEdit]);
+
         $edit = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 }
 
-// Daftar wisata
+// ========================================
+// DAFTAR WISATA
+// ========================================
+
 $stmt = $pdo->query(
     'SELECT * FROM wisata ORDER BY id DESC'
 );
@@ -196,6 +364,17 @@ $pesan = [
     'edit' => 'Data wisata berhasil diperbarui.',
     'hapus' => 'Data wisata berhasil dihapus.'
 ];
+
+// Untuk menampilkan data yang tadi diketik jika ada error
+$formData = $edit ?? [];
+
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    $error !== '' &&
+    ($_POST['aksi'] ?? '') === 'simpan'
+) {
+    $formData = $_POST;
+}
 ?>
 
 <!DOCTYPE html>
@@ -385,8 +564,6 @@ button:hover,
     color: #a83e4c;
 }
 
-/* PENCARIAN */
-
 .cari-box {
     margin-bottom: 15px;
 }
@@ -413,8 +590,6 @@ button:hover,
     text-align: center;
     color: #927b87;
 }
-
-/* TABEL DESKTOP */
 
 .table-wrap {
     width: 100%;
@@ -509,10 +684,7 @@ button:hover,
     }
 }
 
-/* TAMPILAN HP */
-
 @media (max-width: 700px) {
-
     header {
         padding: 14px;
     }
@@ -688,80 +860,101 @@ button:hover,
             <input
                 type="hidden"
                 name="id"
-                value="<?= bersihkan($edit['id'] ?? '') ?>"
+                value="<?= bersihkan($formData['id'] ?? '') ?>"
             >
 
             <div class="form-grid">
 
                 <div>
                     <label for="nama">Nama Wisata</label>
+
                     <input
                         id="nama"
                         name="nama"
                         maxlength="150"
                         required
-                        value="<?= bersihkan($edit['nama'] ?? '') ?>"
+                        value="<?= bersihkan($formData['nama'] ?? '') ?>"
                     >
                 </div>
 
                 <div>
                     <label for="lokasi">Lokasi</label>
+
                     <input
                         id="lokasi"
                         name="lokasi"
                         maxlength="150"
                         required
-                        value="<?= bersihkan($edit['lokasi'] ?? '') ?>"
+                        value="<?= bersihkan($formData['lokasi'] ?? '') ?>"
                     >
                 </div>
 
                 <div>
                     <label for="kategori">Kategori</label>
+
                     <input
                         id="kategori"
                         name="kategori"
                         maxlength="50"
                         required
                         placeholder="Pantai, Alam, Sejarah"
-                        value="<?= bersihkan($edit['kategori'] ?? '') ?>"
+                        value="<?= bersihkan($formData['kategori'] ?? '') ?>"
                     >
                 </div>
 
                 <div>
                     <label for="harga">Harga Tiket (Rp)</label>
+
                     <input
                         id="harga"
-                        type="number"
+                        type="text"
                         name="harga"
-                        min="0"
-                        step="0.01"
+                        inputmode="numeric"
                         required
-                        value="<?= bersihkan($edit['harga'] ?? '') ?>"
+                        placeholder="Contoh: 75.000"
+                        value="<?= bersihkan(
+                            isset($formData['harga'])
+                                ? (
+                                    $error !== '' &&
+                                    $_SERVER['REQUEST_METHOD'] === 'POST'
+                                        ? $formData['harga']
+                                        : formatHargaInput($formData['harga'])
+                                )
+                                : ''
+                        ) ?>"
                     >
+
+                    <small>
+                        Bisa ketik 75000 atau 75.000.
+                        Keduanya menjadi Rp 75.000.
+                    </small>
                 </div>
 
             </div>
 
             <label for="gambar">Lokasi Gambar</label>
+
             <input
                 id="gambar"
                 name="gambar"
                 maxlength="500"
                 required
                 placeholder="assets/css/images/pantai.jpg"
-                value="<?= bersihkan($edit['gambar'] ?? '') ?>"
+                value="<?= bersihkan($formData['gambar'] ?? '') ?>"
             >
 
             <small>
-                Masukkan alamat atau lokasi file gambar wisata.
+                Untuk Masjid Agung Banten, gunakan:
+                <strong>assets/css/images/masjid_banten.jpg</strong>
             </small>
 
             <label for="deskripsi">Deskripsi</label>
+
             <textarea
                 id="deskripsi"
                 name="deskripsi"
                 required
-            ><?= bersihkan($edit['deskripsi'] ?? '') ?></textarea>
+            ><?= bersihkan($formData['deskripsi'] ?? '') ?></textarea>
 
             <div class="form-actions">
 
@@ -770,7 +963,10 @@ button:hover,
                 </button>
 
                 <?php if ($edit): ?>
-                    <a class="btn batal" href="kelola_wisata.php">
+                    <a
+                        class="btn batal"
+                        href="kelola_wisata.php"
+                    >
                         Batal Edit
                     </a>
                 <?php endif; ?>
@@ -785,10 +981,15 @@ button:hover,
 
     <section class="panel">
 
-        <h2>Daftar Wisata (<?= count($wisataList) ?>)</h2>
+        <h2>
+            Daftar Wisata (<?= count($wisataList) ?>)
+        </h2>
 
         <div class="cari-box">
-            <label for="cariWisata">🔍 Cari Wisata untuk Diedit</label>
+
+            <label for="cariWisata">
+                🔍 Cari Wisata untuk Diedit
+            </label>
 
             <input
                 type="search"
@@ -796,6 +997,7 @@ button:hover,
                 placeholder="Ketik nama, lokasi, kategori, atau ID wisata..."
                 autocomplete="off"
             >
+
         </div>
 
         <p class="info-hasil" id="infoHasil">
@@ -830,6 +1032,11 @@ button:hover,
 
                 <?php foreach ($wisataList as $w): ?>
 
+                    <?php
+                    $gambarTampil = gambarWisataAdmin($w);
+                    $urlGambar = urlGambarAdmin($gambarTampil);
+                    ?>
+
                     <tr
                         class="baris-wisata"
                         data-cari="<?= bersihkan(
@@ -846,14 +1053,16 @@ button:hover,
 
                         <td data-label="Gambar">
 
-                            <?php if ($w['gambar'] !== ''): ?>
+                            <?php if ($urlGambar !== ''): ?>
+
                                 <img
                                     class="foto"
-                                    src="<?= bersihkan($w['gambar']) ?>"
+                                    src="<?= bersihkan($urlGambar) ?>"
                                     alt="Foto <?= bersihkan($w['nama']) ?>"
                                     loading="lazy"
                                     onerror="this.style.display='none'"
                                 >
+
                             <?php endif; ?>
 
                         </td>
@@ -980,11 +1189,25 @@ function cariWisata() {
 
     tidakDitemukan.style.display =
         barisWisata.length > 0 && jumlah === 0
-        ? 'block'
-        : 'none';
+            ? 'block'
+            : 'none';
 }
 
 inputCariWisata.addEventListener('input', cariWisata);
+
+// Otomatis format harga ketika mengetik
+const inputHarga = document.getElementById('harga');
+
+inputHarga.addEventListener('input', function() {
+    let angka = this.value.replace(/\D/g, '');
+
+    if (angka === '') {
+        this.value = '';
+        return;
+    }
+
+    this.value = angka.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+});
 </script>
 
 </body>
